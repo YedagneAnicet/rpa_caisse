@@ -5,9 +5,17 @@ Suite Teardown    Disconnect From Database
 Library           DatabaseLibrary
 Library           ExcelLibrary
 Library           BuiltIn
+Library           SeleniumLibrary
+Library           DateTime
+Library           RPA.Email.ImapSmtp   smtp_server=smtp.gmail.com  smtp_port=587
+Task Setup  Authorize  account=${gmail}  password=${mdp}
+
 
 
 *** Variables ***
+${gmail}                testpython.eburtis@gmail.com
+${mdp}                  *************
+
 ${DBHost}         localhost
 ${DBName}         rpa_caisse_db
 ${DBPass}         postgres
@@ -39,8 +47,21 @@ Vérification des montants
     [Arguments]         ${montant_carte_bancaire}   ${montant_espece}    ${montant_ticket_restaurant}   ${montant_prelevement}   ${montant_apport_monnaie}
     ${montant_total}    Evaluate            ${montant_carte_bancaire}+${montant_espece}+${montant_ticket_restaurant}
     ${solde}            Evaluate            ${montant_prelevement} - ${montant_apport_monnaie}
-    ${solde_valid}      Run Keyword If      '${montant_total}'=='${solde}'    Set Variable    ${True}     ELSE    Set Variable    ${False}
-    [Return]            ${solde_valid}
+    ${statut_solde}      Run Keyword If      '${montant_total}'=='${solde}'    Set Variable    ${True}     ELSE    Set Variable    ${False}
+    [Return]            ${statut_solde}
+
+Format Date
+    [Arguments]         ${date}
+    ${date} =    Get Current Date    result_format=%d/%m/%Y
+    [Return]    ${date}
+
+Envoie de mail en cas d'erreur
+    [Arguments]   ${email_responsable}       ${date}
+    Send Message  sender=${gmail}
+    ...           recipients=${email_responsable}
+    ...           subject=RPA CAISSE
+    ...           body=Bonjour, J'ai trouvé une erreur dans le rapport journalier du ${date} sur les montants, \n Merci de verifier les differents montants. \n Coordialement
+    ...           attachments=${chemin}
 
 
 
@@ -56,5 +77,9 @@ RPA CAISSE
     ${montant_apport_monnaie}       Lire le fichier Excel       ${chemin}       ${feuille}       16      4
 
     Insertion dans la base de donnee        ${nom_responsable}          ${email_responsable}    ${date}    ${montant_carte_bancaire}   ${montant_espece}    ${montant_ticket_restaurant}   ${montant_prelevement}   ${montant_apport_monnaie}
-    ${solde}        Vérification des montants               ${montant_carte_bancaire}   ${montant_espece}       ${montant_ticket_restaurant}   ${montant_prelevement}   ${montant_apport_monnaie}
-
+    ${status_solde}        Vérification des montants               ${montant_carte_bancaire}   ${montant_espece}       ${montant_ticket_restaurant}   ${montant_prelevement}   ${montant_apport_monnaie}
+    
+    ${date_format}      Format Date    ${date}
+    IF    ${status_solde} == False
+         Envoie de mail en cas d'erreur    ${email_responsable}    ${date_format}
+    END
